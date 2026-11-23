@@ -96,7 +96,6 @@ jobs:
       - name: Validate application secrets
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
 
@@ -106,10 +105,6 @@ jobs:
         run: |
           if [ -z "$GOOGLE_API_KEY" ]; then
             echo "Error: GOOGLE_API_KEY secret is not set."
-            exit 1
-          fi
-          if [ -z "$TAVILY_API_KEY" ]; then
-            echo "Error: TAVILY_API_KEY secret is not set."
             exit 1
           fi
           if [ -z "$OPENAI_API_KEY" ]; then
