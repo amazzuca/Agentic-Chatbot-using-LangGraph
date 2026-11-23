@@ -35,10 +35,8 @@ integration:
         run: |
           echo "Running unit tests"
 
-  #2. Build and Push Docker Image to docker hub
-  
-  
-  push_to_registry:
+ #2. Build and Push Docker Image to docker hub
+push_to_registry:
     name: Build and Push Docker Image to Docker Hub
     needs: integration
     runs-on: ubuntu-latest
