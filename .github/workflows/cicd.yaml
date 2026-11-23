@@ -99,14 +99,27 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
+          LANGSMITH_TRACING: ${{ secrets.LANGSMITH_TRACING }}
         run: |
-          for var in GOOGLE_API_KEY TAVILY_API_KEY OPENAI_API_KEY OPENWEATHER_API_KEY LANGSMITH_API_KEY; do
-            if [ -z "${!var}" ]; then
-              echo "Error: $var secret is not set."
-              exit 1
-            fi
-          done
+          if [ -z "$GOOGLE_API_KEY" ]; then
+            echo "Error: GOOGLE_API_KEY secret is not set."
+            exit 1
+          fi
+          if [ -z "$TAVILY_API_KEY" ]; then
+            echo "Error: TAVILY_API_KEY secret is not set."
+            exit 1
+          fi
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "Error: OPENAI_API_KEY secret is not set."
+            exit 1
+          fi
+          if [ -z "$LANGSMITH_API_KEY" ]; then
+            echo "Error: LANGSMITH_API_KEY secret is not set."
+            exit 1
+          fi
 
           echo "All required application secrets are set."
 
@@ -127,6 +140,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+
           LANGSMITH_TRACING: ${{ secrets.LANGSMITH_TRACING }}
           LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
@@ -136,14 +150,14 @@ jobs:
             --restart unless-stopped \
             --name stapp \
             -p 8501:8501 \
-            -e GOOGLE_API_KEY \
-            -e TAVILY_API_KEY \
-            -e OPENAI_API_KEY \
-            -e OPENWEATHER_API_KEY \
-            -e LANGSMITH_API_KEY \
-            -e LANGSMITH_ENDPOINT \
-            -e LANGSMITH_TRACING \
-            -e LANGSMITH_PROJECT \
+            -e GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}" \
+            -e TAVILY_API_KEY="${{ secrets.TAVILY_API_KEY }}" \
+            -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
+            -e OPENWEATHER_API_KEY="${{ secrets.OPENWEATHER_API_KEY }}" \
+            -e LANGSMITH_API_KEY="${{ secrets.LANGSMITH_API_KEY }}" \
+            -e LANGSMITH_ENDPOINT="${{ secrets.LANGSMITH_ENDPOINT }}" \
+            -e LANGSMITH_TRACING="${{ secrets.LANGSMITH_TRACING }}" \
+            -e LANGSMITH_PROJECT="${{ secrets.LANGSMITH_PROJECT }}" \
             "${IMAGE_PATH}:main"
 
       - name: Verify container is running
@@ -178,7 +192,6 @@ jobs:
           exit 1
 
       - name: Show recent application logs
-        if: always()
         run: |
           echo "Showing recent logs from the Streamlit container:"
           docker logs --tail 50 stapp 2>/dev/null || true
