@@ -6,20 +6,18 @@ on:
       - main
     paths-ignore:
       - 'README.md'
-  
   workflow_dispatch:
 
-  concurrency:
-    group: agentic-chatbot-production
-    cancel-in-progress: true
-    
-  permissions:
-    contents: read
+concurrency:
+  group: agentic-chatbot-production
+  cancel-in-progress: true
 
+permissions:
+  contents: read
 
 jobs:
-#1. Continuous Integration
-integration:
+  # 1. Continuous Integration
+  integration:
     name: Continuous Integration
     runs-on: ubuntu-latest
 
@@ -35,8 +33,8 @@ integration:
         run: |
           echo "Running unit tests"
 
- #2. Build and Push Docker Image to docker hub
-push_to_registry:
+  # 2. Build and Push Docker Image to Docker Hub
+  push_to_registry:
     name: Build and Push Docker Image to Docker Hub
     needs: integration
     runs-on: ubuntu-latest
@@ -63,151 +61,129 @@ push_to_registry:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and Push Docker Image
-        uses: docker/build-push-action@v46
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
           tags: |
-           ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}:main
-           ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}:sha-${{ github.sha }}
-          cache-form: type=gha
+            ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}:main
+            ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}:sha-${{ github.sha }}
+          cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  # 3. Deploy Docker to EC2 (Self-Hosted Runner)
+  continuous-deployment:
+    name: Deploy to AWS EC2
+    needs: push_to_registry
+    runs-on: self-hosted
 
-#3 . Deploy Docker to EC2 to Self-Hosted Runner
-continous-deployment:
-  name: Deploy to AWS EC2
-  needs: push_to_registry
-  runs-on: self-hosted
+    steps:
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-  steps:
-    - name: Log in to Docker Hub
-      uses: docker/login-action@v4
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Validate application secrets
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+        run: |
+          for var in GOOGLE_API_KEY TAVILY_API_KEY OPENAI_API_KEY OPENWEATHER_API_KEY LANGSMITH_API_KEY; do
+            if [ -z "${!var}" ]; then
+              echo "Error: $var secret is not set."
+              exit 1
+            fi
+          done
 
-    - name: Validate application secrets
-      env:
-        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-        
-        LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-        LANGSMITH_ENPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
-        LANGSMITH_TRACING: ${{ secrets.LANGSMITH_TRACING }}
-      run: |
-        if [ -z "$GOOGLE_API_KEY" ]; then
-          echo "Error: GOOGLE_API_KEY secret is not set."
-          exit 1
-        fi
-        if [ -z "$TAVILY_API_KEY" ]; then
-          echo "Error: TAVILY_API_KEY secret is not set."
-          exit 1
-        fi
-        if [ -z "$OPENAI_API_KEY" ]; then
-          echo "Error: OPENAI_API_KEY secret is not set."
-          exit 1
-        fi
-        if [ -z "$LANGCHAIN_API_KEY" ]; then
-          echo "Error: LANGCHAIN_API_KEY secret is not set."
-          exit 1
-        fi
+          echo "All required application secrets are set."
 
-        echo "All required application secrets are set."
-  
-    - name: Pull latest Docker Image
-      env: 
-        IMAGE_PATH: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}
-      run: |
-        docker pull "${{IMAGE_PATH}}:main"
+      - name: Pull latest Docker Image
+        env:
+          IMAGE_PATH: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}
+        run: |
+          docker pull "${IMAGE_PATH}:main"
 
-    - name: stop and remove old container
-      run: |
-        docker rm -f stapp 2>/dev/null || true
+      - name: Stop and remove old container
+        run: |
+          docker rm -f stapp 2>/dev/null || true
 
-    - name: Run Streamlit container
-      env: 
-        IMAGE_PATH: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}
-        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
-        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-        
-        LANGSMITH_TRACING: ${{ secrets.LANGSMITH_TRACING }}
-        LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
-        LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-        LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+      - name: Run Streamlit container
+        env:
+          IMAGE_PATH: ${{ secrets.DOCKER_USERNAME }}/${{ secrets.IMAGE_NAME }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          LANGSMITH_TRACING: ${{ secrets.LANGSMITH_TRACING }}
+          LANGSMITH_ENDPOINT: ${{ secrets.LANGSMITH_ENDPOINT }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          LANGSMITH_PROJECT: ${{ secrets.LANGSMITH_PROJECT }}
+        run: |
+          docker run -d \
+            --restart unless-stopped \
+            --name stapp \
+            -p 8501:8501 \
+            -e GOOGLE_API_KEY \
+            -e TAVILY_API_KEY \
+            -e OPENAI_API_KEY \
+            -e OPENWEATHER_API_KEY \
+            -e LANGSMITH_API_KEY \
+            -e LANGSMITH_ENDPOINT \
+            -e LANGSMITH_TRACING \
+            -e LANGSMITH_PROJECT \
+            "${IMAGE_PATH}:main"
 
-      run: |
-        docker run -d \
-          --restart unless-stopped \
-          --name stapp \
-          -p 8501:8501 \
-          -e GOOGLE_API_KEY="${{ secrets.GOOGLE_API_KEY }}" \
-          -e TAVILY_API_KEY="${{ secrets.TAVILY_API_KEY }}" \
-          -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" \
-          -e OPENWEATHER_API_KEY="${{ secrets.OPENWEATHER_API_KEY }}" \
-          -e LANGCHAIN_API_KEY="${{ secrets.LANGCHAIN_API_KEY }}" \
-          -e LANGSMITH_API_KEY="${{ secrets.LANGSMITH_API_KEY }}" \
-          -e LANGSMITH_ENDPOINT="${{ secrets.LANGSMITH_ENDPOINT }}" \
-          -e LANGSMITH_TRACING="${{ secrets.LANGSMITH_TRACING }}" \
-          "${{IMAGE_PATH}}:main"
+      - name: Verify container is running
+        run: |
+          sleep 10
 
-    - name: verify container is running
-      run: |
-        sleep 10
-
-        if ! docker ps \
-          -- filter "name=^stapp$" \
-          -- filter "status=running" \
-          -- format "{{.Names}}" | grep -q "^stapp$"; then
-          echo "Error: Streamlit container is not running."
-          docker logs stapp || true
-          exit 1
-        fi
-
-        echo "Streamlit container is running successfully."
-        docker ps --filter "name=^stapp$"
-    - name : Verify Streamlit health endpoint
-      run: |
-        for attempt in $(seq 1 12); do
-          if docker exec stapp python -c \
-          "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')" 
-          >/dev/null 2>&1; then
-          
-            echo "Streamlit health endpoint is reachable."
-            exit 0
+          if ! docker ps \
+            --filter "name=^stapp$" \
+            --filter "status=running" \
+            --format "{{.Names}}" | grep -q "^stapp$"; then
+            echo "Error: Streamlit container is not running."
+            docker logs stapp || true
+            exit 1
           fi
-          echo "Waiting for streamlit to become ready... Attempt $attempt of 12"
-          sleep 5
-        done
 
-        echo "streamlit did not become healty"
-        docker logs --tail 100 stapp || true
-        exit 
-        
-    - name: Show recent application logs
-      run: |
-        echo "Showing recent logs from the Streamlit container:"
-        docker logs --tail 50 stapp 2>/dev/null || true
-    - name: Remobe unused Docker images
-      run: |
-        echo "Removing unused Docker images to free up space..."
-        docker image prune -f
+          echo "Streamlit container is running successfully."
+          docker ps --filter "name=^stapp$"
 
+      - name: Verify Streamlit health endpoint
+        run: |
+          for attempt in $(seq 1 12); do
+            if docker exec stapp python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')" >/dev/null 2>&1; then
+              echo "Streamlit health endpoint is reachable."
+              exit 0
+            fi
+            echo "Waiting for Streamlit to become ready... Attempt $attempt of 12"
+            sleep 5
+          done
 
+          echo "Streamlit did not become healthy"
+          docker logs --tail 100 stapp || true
+          exit 1
 
+      - name: Show recent application logs
+        if: always()
+        run: |
+          echo "Showing recent logs from the Streamlit container:"
+          docker logs --tail 50 stapp 2>/dev/null || true
 
-
+      - name: Remove unused Docker images
+        run: |
+          echo "Removing unused Docker images to free up space..."
+          docker image prune -f
