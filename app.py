@@ -355,7 +355,7 @@ sync_pending_interrupt(
 # ========================= Sidebar threading feature =========================
 
 # Display the sidebar title
-st.sidebar.title("My Conversations")
+st.sidebar.title("Mis conversaciones")
 
 
 # Create a button for starting a new conversation
